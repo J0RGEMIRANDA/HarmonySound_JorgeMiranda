@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using HarmonySound.API.Consumer;
+using HarmonySound.Models;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HarmonySound.MVC.Controllers
@@ -8,13 +10,15 @@ namespace HarmonySound.MVC.Controllers
         // GET: ContentsAlbumsController
         public ActionResult Index()
         {
-            return View();
+            var data = Crud<Album>.GetAll();
+            return View(data);
         }
 
         // GET: ContentsAlbumsController/Details/5
         public ActionResult Details(int id)
         {
-            return View();
+            var data = Crud<Album>.GetById(id);
+            return View(data);
         }
 
         // GET: ContentsAlbumsController/Create
@@ -26,57 +30,65 @@ namespace HarmonySound.MVC.Controllers
         // POST: ContentsAlbumsController/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Create(IFormCollection collection)
+        public ActionResult Create(ContentAlbum data)
         {
             try
             {
+                Crud<ContentAlbum>.Create(data);
                 return RedirectToAction(nameof(Index));
             }
-            catch
-            {
-                return View();
+            catch(Exception ex)
+            { 
+                ModelState.AddModelError("", "An error occurred while creating the content album: " + ex.Message);
+                return View(data);
             }
         }
 
         // GET: ContentsAlbumsController/Edit/5
         public ActionResult Edit(int id)
         {
-            return View();
+            var data = Crud<ContentAlbum>.GetById(id);
+            return View(data);
         }
 
         // POST: ContentsAlbumsController/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Edit(int id, IFormCollection collection)
+        public ActionResult Edit(int id, ContentAlbum data)
         {
             try
             {
+                Crud<ContentAlbum>.Update(id, data);
                 return RedirectToAction(nameof(Index));
             }
-            catch
+            catch(Exception ex)
             {
-                return View();
+                ModelState.AddModelError("", "An error occurred while editing the content album: " + ex.Message);
+                return View(data);
             }
         }
 
         // GET: ContentsAlbumsController/Delete/5
         public ActionResult Delete(int id)
         {
-            return View();
+            var data = Crud<ContentAlbum>.GetById(id);
+            return View(data);
         }
 
         // POST: ContentsAlbumsController/Delete/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Delete(int id, IFormCollection collection)
+        public ActionResult Delete(int id, ContentAlbum data)
         {
             try
             {
+                Crud<ContentAlbum>.Delete(id);
                 return RedirectToAction(nameof(Index));
             }
-            catch
+            catch(Exception ex)
             {
-                return View();
+                ModelState.AddModelError("", "An error occurred while deleting the content album: " + ex.Message);
+                return View(data);
             }
         }
     }
