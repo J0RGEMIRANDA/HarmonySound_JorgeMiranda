@@ -7,7 +7,7 @@ using HarmonySound.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
-public class HarmonySoundDbContext : IdentityDbContext<User, Role, int, 
+public class HarmonySoundDbContext : IdentityDbContext<User, Role, int,
     Microsoft.AspNetCore.Identity.IdentityUserClaim<int>,
     UserRole,
     Microsoft.AspNetCore.Identity.IdentityUserLogin<int>,
@@ -49,5 +49,23 @@ public class HarmonySoundDbContext : IdentityDbContext<User, Role, int,
                 .HasForeignKey(ur => ur.RoleId)
                 .IsRequired();
         });
+
+        // Configuración para PlaylistContent
+        builder.Entity<PlaylistContent>()
+            .HasKey(pc => new { pc.PlaylistId, pc.ContentId });
+
+        builder.Entity<PlaylistContent>()
+            .HasOne(pc => pc.Playlist)
+            .WithMany(p => p.PlaylistContents)
+            .HasForeignKey(pc => pc.PlaylistId);
+
+        builder.Entity<PlaylistContent>()
+            .HasOne(pc => pc.Content)
+            .WithMany()
+            .HasForeignKey(pc => pc.ContentId);
     }
+
+    public DbSet<HarmonySound.Models.Playlist> Playlist { get; set; } = default!;
+
+    public DbSet<HarmonySound.Models.PlaylistContent> PlaylistContents { get; set; } = default!;
 }
