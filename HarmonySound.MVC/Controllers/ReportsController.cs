@@ -37,9 +37,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Report>.Create(data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while creating the report: " + ex.Message);
                 return View(data);
             }
         }
@@ -61,9 +60,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Report>.Update(id, data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while editing the report: " + ex.Message);
                 return View(data);
             }
         }
@@ -85,9 +83,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Report>.Delete(id);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while deleting the report: " + ex.Message);
                 return View(data);
             }
         }

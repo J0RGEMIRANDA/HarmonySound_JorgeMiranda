@@ -37,9 +37,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Statistic>.Create(data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while creating the statistic: " + ex.Message);
                 return View(data);
             }
         }
@@ -61,9 +60,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Statistic>.Update(id, data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while editing the statistic: " + ex.Message);
                 return View(data);
             }
         }

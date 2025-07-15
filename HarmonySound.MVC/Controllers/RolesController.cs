@@ -37,9 +37,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Role>.Create(data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while creating the role: " + ex.Message);
                 return View(data);
             }
         }
@@ -61,9 +60,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Role>.Update(id, data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while editing the role: " + ex.Message);
                 return View(data);
             }
         }
@@ -85,9 +83,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<Role>.Delete(id);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while deleting the role: " + ex.Message);
                 return View(data);
             }
         }

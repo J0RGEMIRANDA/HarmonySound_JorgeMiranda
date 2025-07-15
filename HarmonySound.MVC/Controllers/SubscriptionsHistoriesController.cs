@@ -16,7 +16,7 @@ namespace HarmonySound.MVC.Controllers
 
         // GET: SubscriptionsHistoriesController/Details/5
         public ActionResult Details(int id)
-        { 
+        {
             var data = Crud<SubscriptionHistory>.GetById(id);
             return View(data);
         }
@@ -37,16 +37,15 @@ namespace HarmonySound.MVC.Controllers
                 Crud<SubscriptionHistory>.Create(data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while creating the subscription history: " + ex.Message);
                 return View(data);
             }
         }
 
         // GET: SubscriptionsHistoriesController/Edit/5
         public ActionResult Edit(int id)
-        {
+        { 
             var data = Crud<SubscriptionHistory>.GetById(id);
             return View(data);
         }
@@ -61,9 +60,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<SubscriptionHistory>.Update(id, data);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while editing the subscription history: " + ex.Message);
                 return View(data);
             }
         }
@@ -85,9 +83,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<SubscriptionHistory>.Delete(id);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex)
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while deleting the subscription history: " + ex.Message);
                 return View(data);
             }
         }

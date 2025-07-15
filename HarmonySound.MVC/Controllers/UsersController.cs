@@ -80,9 +80,8 @@ namespace HarmonySound.MVC.Controllers
                 Crud<User>.Delete(id);
                 return RedirectToAction(nameof(Index));
             }
-            catch(Exception ex) 
+            catch
             {
-                ModelState.AddModelError("", "An error occurred while deleting the User: " + ex.Message);
                 return View(data);
             }
         }
