@@ -10,7 +10,7 @@ using System.Text.Json;
 
 namespace HarmonySound.MVC.Controllers
 {
-    
+
     public class PlansController : Controller
     {
         // GET: PlansController
@@ -63,6 +63,25 @@ namespace HarmonySound.MVC.Controllers
                 TempData["Success"] = "Subscription successful!";
             else
                 TempData["Error"] = "Subscription failed.";
+
+            return RedirectToAction("Index");
+        }
+
+        // Agregar este método para cancelar suscripción
+        [Authorize(Roles = "client")]
+        [HttpPost]
+        public async Task<IActionResult> Cancel()
+        {
+            int userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+
+            var payload = new { UserId = userId };
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("https://localhost:7120/api/UserPlans/cancel", content);
+
+            if (response.IsSuccessStatusCode)
+                TempData["Success"] = "Suscripción cancelada exitosamente";
+            else
+                TempData["Error"] = "Error al cancelar la suscripción";
 
             return RedirectToAction("Index");
         }
