@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace HarmonySound.Models
 {
@@ -21,5 +16,9 @@ namespace HarmonySound.Models
         public DateTimeOffset EndDate { get; set; }
 
         public bool Active { get; set; }
+        
+        // ✅ ESTAS PROPIEDADES DEBEN EXISTIR
+        public bool IsCancelled { get; set; } = false;
+        public DateTimeOffset? CancelledDate { get; set; }
     }
 }

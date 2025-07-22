@@ -28,7 +28,7 @@ namespace HarmonySound.API.Controllers
             _env = env;
             _logger = logger;
             _blobConnectionString = configuration["AzureBlobStorage:ConnectionString"];
-            _blobContainerName = configuration["AzureBlobStorage:ContainerName"];
+            _blobContainerName = configuration["AzureBlobStorage:MediaContainer"]; // ✅ CAMBIADO
             
             // Inicializar MediaFoundation para soporte de archivos de audio avanzados
             MediaFoundationApi.Startup();
@@ -238,12 +238,34 @@ namespace HarmonySound.API.Controllers
             }
         }
 
-        // DELETE: api/Contents/5
+        // DELETE: api/Contents/5 - MEJORADO
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteContent(int id)
         {
             var content = await _context.Contents.FindAsync(id);
             if (content == null) return NotFound();
+
+            // ✅ OPCIONAL: Eliminar archivo de Azure Blob Storage
+            if (!string.IsNullOrEmpty(content.UrlMedia))
+            {
+                try
+                {
+                    var blobServiceClient = new BlobServiceClient(_blobConnectionString);
+                    var containerClient = blobServiceClient.GetBlobContainerClient(_blobContainerName);
+                    
+                    // Extraer nombre del blob de la URL
+                    var fileName = Path.GetFileName(new Uri(content.UrlMedia).LocalPath);
+                    var blobClient = containerClient.GetBlobClient(fileName);
+                    
+                    await blobClient.DeleteIfExistsAsync();
+                    _logger.LogInformation($"Archivo eliminado de Azure: {fileName}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"Error al eliminar archivo de Azure: {ex.Message}");
+                    // No fallar la operación por esto
+                }
+            }
 
             _context.Contents.Remove(content);
             await _context.SaveChangesAsync();
@@ -437,6 +459,38 @@ namespace HarmonySound.API.Controllers
                 {
                     _context.PlaylistContents.Remove(playlistContent);
                 }
+            }
+        }
+
+        // ✅ AGREGAR este método al ContentsController existente
+        [HttpGet("with-artists")]
+        public async Task<IActionResult> GetContentsWithArtists()
+        {
+            try
+            {
+                var contents = await _context.Contents
+                    .Include(c => c.Artist) // Incluir información del artista
+                    .Where(c => !string.IsNullOrEmpty(c.UrlMedia)) // Solo contenido con URL válida
+                    .Select(c => new
+                    {
+                        Id = c.Id,
+                        Title = c.Title,
+                        Type = c.Type,
+                        UrlMedia = c.UrlMedia,
+                        Duration = c.Duration,
+                        UploadDate = c.UploadDate,
+                        ArtistId = c.ArtistId,
+                        ArtistName = c.Artist != null ? c.Artist.Name : "Artista desconocido",
+                        FormattedDuration = c.Duration.ToString(@"mm\:ss")
+                    })
+                    .ToListAsync();
+
+                return Ok(contents);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener contenidos con artistas");
+                return BadRequest($"Error: {ex.Message}");
             }
         }
 

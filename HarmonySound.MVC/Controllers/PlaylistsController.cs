@@ -6,7 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using HarmonySound.API.DTOs;
+using HarmonySound.MVC.Models; // Usar el namespace local
 
 namespace HarmonySound.MVC.Controllers
 {
@@ -19,34 +19,99 @@ namespace HarmonySound.MVC.Controllers
             _httpClient = httpClient;
         }
 
-        // Mostrar todas las canciones y playlists del usuario
-        public async Task<IActionResult> Index()
+        // Mostrar todas las playlists del usuario con opción de agregar contenido
+        public async Task<IActionResult> Index(int? contentId = null)
         {
-            // Obtén playlists con sus canciones (ajusta según tu API)
-            var playlistsResponse = await _httpClient.GetAsync("https://localhost:7120/api/Playlists");
-            var playlistsJson = await playlistsResponse.Content.ReadAsStringAsync();
-            var playlists = JsonSerializer.Deserialize<List<PlaylistDto>>(playlistsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            var songsResponse = await _httpClient.GetAsync("https://localhost:7120/api/Contents");
-            var songsJson = await songsResponse.Content.ReadAsStringAsync();
-            var songs = JsonSerializer.Deserialize<List<Content>>(songsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            ViewBag.Songs = songs;
-
-            return View(playlists);
+            try
+            {
+                int userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+                
+                // Obtener información del contenido si se está agregando
+                Content selectedContent = null;
+                if (contentId.HasValue)
+                {
+                    var contentResponse = await _httpClient.GetAsync($"https://localhost:7120/api/Contents/{contentId.Value}");
+                    if (contentResponse.IsSuccessStatusCode)
+                    {
+                        var contentJson = await contentResponse.Content.ReadAsStringAsync();
+                        selectedContent = JsonSerializer.Deserialize<Content>(contentJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    }
+                }
+                
+                // Obtener playlists del usuario
+                var playlistsResponse = await _httpClient.GetAsync($"https://localhost:7120/api/Playlists/user/{userId}");
+                
+                if (playlistsResponse.IsSuccessStatusCode)
+                {
+                    var playlistsJson = await playlistsResponse.Content.ReadAsStringAsync();
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var playlistsData = JsonSerializer.Deserialize<JsonElement[]>(playlistsJson, options);
+                    
+                    var userPlaylists = playlistsData.Select(p => new PlaylistDto
+                    {
+                        Id = p.GetProperty("id").GetInt32(),
+                        Name = p.GetProperty("name").GetString() ?? "",
+                        // ✅ AGREGAR ESTA LÍNEA:
+                        ImageUrl = p.TryGetProperty("imageUrl", out var imageUrl) 
+                            ? imageUrl.GetString() 
+                            : null,
+                        Songs = p.TryGetProperty("songs", out var songs) 
+                            ? songs.EnumerateArray().Select(s => new PlaylistSongDto
+                            {
+                                ContentId = s.GetProperty("contentId").GetInt32(),
+                                Title = s.GetProperty("title").GetString() ?? "",
+                                UrlMedia = s.GetProperty("urlMedia").GetString() ?? "",
+                                ArtistName = s.TryGetProperty("artistName", out var artistName) 
+                                    ? artistName.GetString() ?? "Artista desconocido"
+                                    : "Artista desconocido",
+                                // ✅ AGREGAR: Mapear Duration
+                                Duration = s.TryGetProperty("duration", out var duration) 
+                                    ? TimeSpan.Parse(duration.GetString() ?? "00:00:00")
+                                    : TimeSpan.Zero
+                            }).ToList() 
+                            : new List<PlaylistSongDto>()
+                    }).ToList();
+                    
+                    ViewBag.SelectedContent = selectedContent;
+                    ViewBag.ContentId = contentId;
+                    
+                    return View(userPlaylists);
+                }
+                
+                ViewBag.SelectedContent = selectedContent;
+                ViewBag.ContentId = contentId;
+                return View(new List<PlaylistDto>());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in PlaylistsController.Index: {ex.Message}");
+                return View(new List<PlaylistDto>());
+            }
         }
 
         // Agregar canción a playlist
         [HttpPost]
         public async Task<IActionResult> AddToPlaylist(int playlistId, int contentId)
         {
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
-            var content = new StringContent(contentId.ToString(), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync($"https://localhost:7120/api/Playlists/{playlistId}/add", content);
+            try
+            {
+                var content = new StringContent(contentId.ToString(), Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync($"https://localhost:7120/api/Playlists/{playlistId}/add", content);
 
-            if (response.IsSuccessStatusCode)
-                TempData["Success"] = "Canción agregada a la playlist.";
-            else
-                TempData["Error"] = "No se pudo agregar la canción.";
+                if (response.IsSuccessStatusCode)
+                {
+                    TempData["Success"] = "Canción agregada a la playlist exitosamente.";
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    TempData["Error"] = $"No se pudo agregar la canción: {errorContent}";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Error al agregar la canción: {ex.Message}";
+            }
 
             return RedirectToAction("Index");
         }
@@ -60,76 +125,283 @@ namespace HarmonySound.MVC.Controllers
         // POST: Playlists/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(Playlist playlist)
-        {
-            if (!ModelState.IsValid)
-                return View(playlist);
-
-            // Asigna el UserId antes de enviar a la API
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
-            playlist.UserId = userId;
-
-            var json = JsonSerializer.Serialize(playlist);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync("https://localhost:7120/api/Playlists", content);
-
-            if (response.IsSuccessStatusCode)
-            {
-                TempData["Success"] = "Playlist creada correctamente.";
-                return RedirectToAction("Index");
-            }
-
-            var errorMsg = await response.Content.ReadAsStringAsync();
-            TempData["Error"] = $"Error al crear la playlist: {errorMsg}";
-            return View(playlist);
-        }
-
-        // GET: PlaylistsController/Details/5
-        public ActionResult Details(int id)
-        {
-            return View();
-        }
-
-        // GET: PlaylistsController/Edit/5
-        public ActionResult Edit(int id)
-        {
-            return View();
-        }
-
-        // POST: PlaylistsController/Edit/5
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public ActionResult Edit(int id, IFormCollection collection)
+        public async Task<IActionResult> Create(Playlist playlist, IFormFile? imageFile)
         {
             try
             {
-                return RedirectToAction(nameof(Index));
+                int userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+                
+                // Crear formulario multipart
+                using var content = new MultipartFormDataContent();
+                content.Add(new StringContent(playlist.Name), "Name");
+                content.Add(new StringContent(userId.ToString()), "UserId");
+                
+                // ✅ NUEVO: Agregar imagen si existe
+                if (imageFile != null && imageFile.Length > 0)
+                {
+                    var fileContent = new StreamContent(imageFile.OpenReadStream());
+                    fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(imageFile.ContentType);
+                    content.Add(fileContent, "ImageFile", imageFile.FileName);
+                }
+
+                var response = await _httpClient.PostAsync("https://localhost:7120/api/Playlists", content);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    TempData["Success"] = "Playlist creada exitosamente.";
+                    return RedirectToAction(nameof(Index));
+                }
+                else
+                {
+                    TempData["Error"] = "Error al crear la playlist.";
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                return View();
+                TempData["Error"] = $"Error: {ex.Message}";
+            }
+            
+            return View(playlist);
+        }
+
+        // GET: Playlists/Details/5
+        // ✅ ACTUALIZADO: GET Details - Incluir ImageUrl
+        public async Task<IActionResult> Details(int id)
+        {
+            try
+            {
+                int userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+                
+                // ✅ IMPORTANTE: Pasar UserId a la vista
+                ViewBag.UserId = userId;
+                
+                // Obtener playlist específica
+                var response = await _httpClient.GetAsync($"https://localhost:7120/api/Playlists/user/{userId}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var playlistsJson = await response.Content.ReadAsStringAsync();
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var playlistsData = JsonSerializer.Deserialize<JsonElement[]>(playlistsJson, options);
+                    
+                    var playlist = playlistsData.FirstOrDefault(p => p.GetProperty("id").GetInt32() == id);
+                    
+                    if (playlist.ValueKind == JsonValueKind.Undefined)
+                    {
+                        return NotFound();
+                    }
+                    
+                    var playlistDto = new PlaylistDto
+                    {
+                        Id = playlist.GetProperty("id").GetInt32(),
+                        Name = playlist.GetProperty("name").GetString() ?? "",
+                        ImageUrl = playlist.TryGetProperty("imageUrl", out var imageUrl) 
+                            ? imageUrl.GetString() 
+                            : null,
+                        Songs = playlist.TryGetProperty("songs", out var songs) 
+                            ? songs.EnumerateArray().Select(s => new PlaylistSongDto
+                            {
+                                ContentId = s.GetProperty("contentId").GetInt32(),
+                                Title = s.GetProperty("title").GetString() ?? "",
+                                UrlMedia = s.GetProperty("urlMedia").GetString() ?? "",
+                                ArtistName = s.TryGetProperty("artistName", out var artistName) 
+                                    ? artistName.GetString() ?? "Artista desconocido"
+                                    : "Artista desconocido",
+                                Duration = TimeSpan.TryParse(s.TryGetProperty("duration", out var duration) 
+                                    ? duration.GetString() 
+                                    : "00:00:00", out var parsedDuration) 
+                                    ? parsedDuration 
+                                    : TimeSpan.Zero
+                            }).ToList()
+                            : new List<PlaylistSongDto>()
+                    };
+                    
+                    return View(playlistDto);
+                }
+                else
+                {
+                    return NotFound();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error en Details: {ex.Message}");
+                return View("Error");
             }
         }
 
-        // GET: PlaylistsController/Delete/5
-        public ActionResult Delete(int id)
+        // GET: PlaylistsController/Edit/5
+        public async Task<ActionResult> Edit(int id)
         {
-            return View();
+            try
+            {
+                int userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+                
+                // Obtener playlist específica
+                var response = await _httpClient.GetAsync($"https://localhost:7120/api/Playlists/user/{userId}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var playlistsJson = await response.Content.ReadAsStringAsync();
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var playlistsData = JsonSerializer.Deserialize<JsonElement[]>(playlistsJson, options);
+                    
+                    var playlist = playlistsData.FirstOrDefault(p => p.GetProperty("id").GetInt32() == id);
+                    
+                    if (playlist.ValueKind == JsonValueKind.Undefined)
+                    {
+                        TempData["Error"] = "Playlist no encontrada.";
+                        return RedirectToAction("Index");
+                    }
+                    
+                    var playlistDto = new PlaylistDto
+                    {
+                        Id = playlist.GetProperty("id").GetInt32(),
+                        Name = playlist.GetProperty("name").GetString() ?? "",
+                        // ✅ AGREGAR: ImageUrl para mostrar imagen actual
+                        ImageUrl = playlist.TryGetProperty("imageUrl", out var imageUrl) 
+                            ? imageUrl.GetString() 
+                            : null,
+                        Songs = playlist.TryGetProperty("songs", out var songs) 
+                            ? songs.EnumerateArray().Select(s => new PlaylistSongDto
+                            {
+                                ContentId = s.GetProperty("contentId").GetInt32(),
+                                Title = s.GetProperty("title").GetString() ?? "",
+                                UrlMedia = s.GetProperty("urlMedia").GetString() ?? "",
+                                ArtistName = s.TryGetProperty("artistName", out var artistName) 
+                                    ? artistName.GetString() ?? "Artista desconocido"
+                                    : "Artista desconocido",
+                                // ✅ AGREGAR: Mapear Duration
+                                Duration = s.TryGetProperty("duration", out var duration) 
+                                    ? TimeSpan.Parse(duration.GetString() ?? "00:00:00")
+                                    : TimeSpan.Zero
+                            }).ToList() 
+                            : new List<PlaylistSongDto>()
+                    };
+                    
+                    return View(playlistDto);
+                }
+                
+                TempData["Error"] = "No se pudo cargar la playlist.";
+                return RedirectToAction("Index");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in PlaylistsController.Edit: {ex.Message}");
+                TempData["Error"] = $"Error al cargar la playlist: {ex.Message}";
+                return RedirectToAction("Index");
+            }
+        }
+
+        // ✅ CORREGIDO: POST PlaylistsController/Edit/5 - Actualizar playlist
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<ActionResult> Edit(int id, PlaylistDto playlistDto, IFormFile? imageFile)
+        {
+            try
+            {
+                // Verificar que el ID coincida
+                if (id != playlistDto.Id)
+                {
+                    TempData["Error"] = "ID de playlist inválido.";
+                    return RedirectToAction("Index");
+                }
+
+                // Validar modelo
+                if (string.IsNullOrWhiteSpace(playlistDto.Name))
+                {
+                    TempData["Error"] = "El nombre de la playlist es obligatorio.";
+                    return View(playlistDto);
+                }
+
+                // ✅ NUEVO: Crear formulario multipart para manejar imagen
+                using var content = new MultipartFormDataContent();
+                content.Add(new StringContent(playlistDto.Id.ToString()), "Id");
+                content.Add(new StringContent(playlistDto.Name), "Name");
+                content.Add(new StringContent(User.FindFirst(ClaimTypes.NameIdentifier).Value), "UserId");
+                
+                // ✅ AGREGAR imagen si se proporciona
+                if (imageFile != null && imageFile.Length > 0)
+                {
+                    var fileContent = new StreamContent(imageFile.OpenReadStream());
+                    fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(imageFile.ContentType);
+                    content.Add(fileContent, "ImageFile", imageFile.FileName);
+                }
+
+                var response = await _httpClient.PutAsync($"https://localhost:7120/api/Playlists/{id}", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    TempData["Success"] = "Playlist actualizada correctamente.";
+                    return RedirectToAction("Details", new { id = id });
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    TempData["Error"] = $"No se pudo actualizar la playlist: {errorContent}";
+                    return View(playlistDto);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in PlaylistsController.Edit POST: {ex.Message}");
+                TempData["Error"] = $"Error al actualizar la playlist: {ex.Message}";
+                return View(playlistDto);
+            }
         }
 
         // POST: PlaylistsController/Delete/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Delete(int id, IFormCollection collection)
+        public async Task<IActionResult> Delete(int id)
         {
             try
             {
-                return RedirectToAction(nameof(Index));
+                var response = await _httpClient.DeleteAsync($"https://localhost:7120/api/Playlists/{id}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    TempData["Success"] = "Playlist eliminada exitosamente.";
+                }
+                else
+                {
+                    TempData["Error"] = "No se pudo eliminar la playlist.";
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                return View();
+                TempData["Error"] = $"Error al eliminar la playlist: {ex.Message}";
             }
+            
+            return RedirectToAction("Index");
+        }
+
+        // POST: Playlists/RemoveFromPlaylist
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveFromPlaylist(int playlistId, int contentId)
+        {
+            try
+            {
+                // Crear endpoint para remover canción de playlist en la API
+                var response = await _httpClient.DeleteAsync($"https://localhost:7120/api/Playlists/{playlistId}/remove/{contentId}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    TempData["Success"] = "Canción eliminada de la playlist exitosamente.";
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    TempData["Error"] = $"No se pudo eliminar la canción de la playlist: {errorContent}";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Error al eliminar la canción: {ex.Message}";
+            }
+            
+            return RedirectToAction("Details", new { id = playlistId });
         }
     }
 }

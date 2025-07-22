@@ -1,4 +1,4 @@
-﻿namespace HarmonySound.API.DTOs
+﻿namespace HarmonySound.MVC.Models
 {
     public class PlaylistSongDto
     {
